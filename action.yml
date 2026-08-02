@@ -1,0 +1,167 @@
+name: 'Publish CI Result'
+description: >-
+  Generic result handoff for self-hosted GitHub Actions runners: uploads
+  arbitrary project files as an artifact, writes a step summary, and
+  optionally maintains one stable pull-request comment. Contains no
+  project-, language-, or model-specific logic -- see README.md.
+author: ahojukka5
+branding:
+  icon: 'upload-cloud'
+  color: 'blue'
+
+inputs:
+  artifact-name:
+    description: 'Name for the uploaded artifact.'
+    required: true
+  paths:
+    description: >-
+      Newline-separated list of files/directories to include in the
+      artifact. The action does not interpret their contents.
+    required: true
+  status:
+    description: >-
+      Final status of the preceding task, e.g. `${{ steps.<id>.outcome }}`.
+    required: true
+  summary-file:
+    description: >-
+      Path to a project-provided human-readable summary (Markdown).
+      Optional; a generic fallback is used if omitted or missing.
+    required: false
+    default: ''
+  metadata-file:
+    description: >-
+      Path to a project-provided result.json. If omitted or missing, a
+      default envelope is generated. Either way, the run's own
+      schema/status/source/workflow fields are always authoritative and
+      overwrite anything the project put in those same keys.
+    required: false
+    default: ''
+  retention-days:
+    description: 'Artifact retention in days.'
+    required: false
+    default: '30'
+  pull-request-number:
+    description: >-
+      PR number to maintain a stable comment on. Omit for push/schedule/
+      workflow_dispatch runs that aren't associated with a PR.
+    required: false
+    default: ''
+  redact:
+    description: >-
+      Newline-separated list of literal secret values, or names of
+      environment variables holding them, to redact from the step summary
+      and PR comment before they are written. Does not scan the uploaded
+      artifact files themselves -- see README.md Security.
+    required: false
+    default: ''
+  comment-marker:
+    description: >-
+      HTML comment marker identifying this action's stable PR comment, so a
+      later run updates the same comment instead of posting a new one.
+    required: false
+    default: '<!-- private-ci-result -->'
+
+outputs:
+  artifact-name:
+    description: 'The artifact name that was uploaded (echoes the input).'
+    value: ${{ inputs.artifact-name }}
+  result-json-path:
+    description: "Path to the (possibly generated) result.json that was bundled."
+    value: ${{ steps.build.outputs.result-json-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build result envelope and step summary
+      id: build
+      shell: bash
+      run: python3 "${{ github.action_path }}/scripts/build_result.py"
+      env:
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        INPUT_PATHS: ${{ inputs.paths }}
+        INPUT_STATUS: ${{ inputs.status }}
+        INPUT_SUMMARY_FILE: ${{ inputs.summary-file }}
+        INPUT_METADATA_FILE: ${{ inputs.metadata-file }}
+        INPUT_REDACT: ${{ inputs.redact }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_SHA: ${{ github.sha }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        GITHUB_JOB: ${{ github.job }}
+        GITHUB_SERVER_URL: ${{ github.server_url }}
+
+    - name: Reject symlinks escaping their configured path
+      shell: bash
+      run: python3 "${{ github.action_path }}/scripts/check_symlinks.py"
+      env:
+        INPUT_PATHS: ${{ inputs.paths }}
+
+    - name: Upload result artifact
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          ${{ inputs.paths }}
+          ${{ steps.build.outputs.result-json-path }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: warn
+
+    - name: Upsert pull request comment
+      if: inputs.pull-request-number != ''
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        SUMMARY_PATH: ${{ steps.build.outputs.redacted-summary-path }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+        COMMENT_MARKER: ${{ inputs.comment-marker }}
+        ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        RESULT_STATUS: ${{ inputs.status }}
+      with:
+        script: |
+          const fs = require('fs')
+          const marker = process.env.COMMENT_MARKER
+          const prNumber = Number(process.env.PR_NUMBER)
+          const summaryPath = process.env.SUMMARY_PATH
+
+          let projectSummary = ''
+          if (summaryPath && fs.existsSync(summaryPath)) {
+            projectSummary = fs.readFileSync(summaryPath, 'utf8').trim()
+          }
+
+          const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+          const body = [
+            marker,
+            `### Private CI result: \`${process.env.RESULT_STATUS}\``,
+            '',
+            `- Workflow: \`${context.workflow}\` / job \`${context.job}\``,
+            `- Commit: \`${context.sha.slice(0, 12)}\``,
+            `- Run: ${runUrl}`,
+            `- Artifact: \`${process.env.ARTIFACT_NAME}\``,
+            '',
+            projectSummary || '_(no project-provided summary)_',
+          ].join('\n')
+
+          // NOTE: only the first 100 comments on the PR are searched. A PR
+          // with more comments than that before this action ever ran on it
+          // could get a duplicate rather than an update on its first run.
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: prNumber,
+            per_page: 100,
+          })
+          const existing = comments.find((c) => c.body && c.body.includes(marker))
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            })
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body,
+            })
+          }

@@ -1,0 +1,99 @@
+name: selftest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  # This repository is public. A pull_request from a fork must never reach
+  # the self-hosted runner below -- both jobs need this one and fail
+  # outright (not a silent skip) if the PR's head repository isn't this
+  # same repository, i.e. isn't from someone with write access.
+  guard-self-hosted:
+    name: Verify trusted source for self-hosted jobs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject pull requests from forks
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::error::Self-hosted runner jobs do not run for pull requests from forks (head repository: ${{ github.event.pull_request.head.repo.full_name }})."
+          exit 1
+
+  validate:
+    name: Validate action.yml and scripts
+    needs: guard-self-hosted
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax-check action.yml and example workflows
+        run: |
+          python3 -c "
+          import sys
+          import yaml
+          for path in ['action.yml', 'examples/source-generation.yml', 'examples/test-benchmark.yml', '.github/workflows/selftest.yml']:
+              yaml.safe_load(open(path))
+              print('OK', path)
+          "
+      - name: Compile-check the Python scripts
+        run: |
+          python3 -m py_compile scripts/build_result.py scripts/check_symlinks.py
+
+  dogfood:
+    name: Exercise the action end to end
+    needs: guard-self-hosted
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Produce a dummy successful task and a dummy failed task
+        id: task
+        continue-on-error: true
+        run: |
+          mkdir -p ci-result reports
+          echo "hello from selftest" > reports/note.txt
+          echo "Selftest summary: this is a dummy run, not a real project result." > ci-result/summary.md
+          python3 -c "
+          import json
+          json.dump({'details': {'selftest': True}}, open('ci-result/result.json', 'w'))
+          "
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            exit 1  # exercise the failure path when triggered from a PR
+          fi
+
+      - name: Publish CI result
+        if: always()
+        uses: ./
+        with:
+          artifact-name: selftest-${{ github.run_id }}-${{ github.run_attempt }}
+          paths: |
+            ci-result/
+            reports/
+          status: ${{ steps.task.outcome }}
+          summary-file: ci-result/summary.md
+          metadata-file: ci-result/result.json
+          redact: |
+            hello from selftest
+          pull-request-number: ${{ github.event.pull_request.number }}
+
+      - name: Verify a symlink escaping its root is rejected
+        run: |
+          mkdir -p ci-result-escape-test
+          ln -s /etc/passwd ci-result-escape-test/escape
+          set +e
+          python3 "$(pwd)/scripts/check_symlinks.py"
+          rc=$?
+          set -e
+          rm -rf ci-result-escape-test
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::expected check_symlinks.py to reject an escaping symlink, but it exited 0"
+            exit 1
+          fi
+        env:
+          INPUT_PATHS: ci-result-escape-test/

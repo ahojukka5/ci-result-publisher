@@ -1,0 +1,51 @@
+# Example: a test/benchmark workflow publishing reports and logs, including
+# on failure. Unrelated to the source-generation example on purpose -- this
+# action makes no assumption about what kind of job is using it.
+name: benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: self-hosted
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run benchmarks
+        id: benchmark
+        continue-on-error: true
+        run: |
+          mkdir -p ci-result reports
+          ./run-benchmarks.sh --output reports/ \
+            >ci-result/stdout.log 2>ci-result/stderr.log
+
+      - name: Write project summary
+        if: always()
+        run: |
+          {
+            echo "Benchmark run finished with outcome: ${{ steps.benchmark.outcome }}"
+            echo
+            echo '```'
+            tail -n 20 ci-result/stdout.log 2>/dev/null || true
+            echo '```'
+          } > ci-result/summary.md
+
+      - name: Publish CI result
+        if: always()
+        uses: ahojukka5/ci-result-publisher@v1
+        with:
+          artifact-name: benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          paths: |
+            ci-result/
+            reports/
+          status: ${{ steps.benchmark.outcome }}
+          summary-file: ci-result/summary.md
+          retention-days: 90
+          # No pull-request-number: this runs on push to main, not a PR.

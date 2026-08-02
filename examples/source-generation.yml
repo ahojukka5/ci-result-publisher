@@ -1,0 +1,81 @@
+# Example: a source-generation workflow publishing its own generated output.
+#
+# Modeled on ahojukka5/helix-lang's actual generator pipeline (an LLM-backed
+# code-generation tool), but this file has no dependency on it -- copy this
+# into any repository whose CI produces files it can't push anywhere and
+# needs to hand off for review instead.
+name: generate
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  # This repository is public. A pull_request from a fork must never reach
+  # the self-hosted runner below -- `generate` needs this job and fails
+  # outright (not a silent skip) if the PR's head repository isn't this
+  # same repository, i.e. isn't from someone with write access.
+  guard-self-hosted:
+    name: Verify trusted source for self-hosted jobs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject pull requests from forks
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::error::Self-hosted runner jobs do not run for pull requests from forks (head repository: ${{ github.event.pull_request.head.repo.full_name }})."
+          exit 1
+
+  generate:
+    needs: guard-self-hosted
+    runs-on: self-hosted
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the generator
+        id: generate
+        continue-on-error: true
+        run: |
+          mkdir -p ci-result generated
+          # Whatever the project's own generation command is. It may exit
+          # non-zero -- continue-on-error above means the publish step below
+          # still runs and still has real output to hand off.
+          ./run-generator.sh --out generated/ \
+            >ci-result/stdout.log 2>ci-result/stderr.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Write project summary and result.json
+        if: always()
+        run: |
+          cat > ci-result/summary.md <<EOF
+          Generated $(find generated -type f | wc -l) file(s).
+          EOF
+          python3 - <<PY
+          import json
+          json.dump(
+              {
+                  "exit_code": ${{ steps.generate.outputs.exit_code || 1 }},
+                  "outputs": [{"path": "generated/", "kind": "generated-files"}],
+                  "details": {"generator": "example"},
+              },
+              open("ci-result/result.json", "w"),
+          )
+          PY
+
+      - name: Publish CI result
+        if: always()
+        uses: ahojukka5/ci-result-publisher@v1
+        with:
+          artifact-name: generate-${{ github.run_id }}-${{ github.run_attempt }}
+          paths: |
+            ci-result/
+            generated/
+          status: ${{ steps.generate.outcome }}
+          summary-file: ci-result/summary.md
+          metadata-file: ci-result/result.json
+          pull-request-number: ${{ github.event.pull_request.number }}
