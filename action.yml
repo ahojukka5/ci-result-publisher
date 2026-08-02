@@ -20,7 +20,10 @@ inputs:
     required: true
   status:
     description: >-
-      Final status of the preceding task, e.g. `${{ steps.<id>.outcome }}`.
+      Final status of the preceding task, e.g. the outcome of a previous
+      step with an id (see README.md for the exact expression -- not
+      written here literally, since GitHub evaluates any ${ {} } found
+      anywhere in this file, including inside description text).
     required: true
   summary-file:
     description: >-
