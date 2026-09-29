@@ -162,10 +162,10 @@ project-specific task
   repository, to anyone) should never silently gain files from outside what
   the project asked to publish.
 - **The PR-comment search only checks the most recent 100 comments** on the
-  target PR (`actions/github-script`'s single-page `listComments` call). A
-  PR that already has more than 100 comments before this action's first run
-  on it could get a duplicate comment on that first run rather than an
-  update; every run after that finds it normally.
+  target PR (`scripts/upsert_comment.py` requests a single page). A PR that
+  already has more than 100 comments before this action's first run on it
+  could get a duplicate comment on that first run rather than an update;
+  every run after that finds it normally.
 
 ## Recommended permissions
 
