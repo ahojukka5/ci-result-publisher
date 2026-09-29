@@ -28,7 +28,7 @@ jobs:
           "
       - name: Compile-check the Python scripts
         run: |
-          python3 -m py_compile scripts/build_result.py scripts/check_symlinks.py
+          python3 -m py_compile scripts/build_result.py scripts/check_symlinks.py scripts/upsert_comment.py
 
       - name: Exercise symlink rejection and workspace boundary
         run: python3 tests/test_check_symlinks.py
