@@ -50,7 +50,7 @@ def load_project_json(path: str) -> dict:
         )
         return {}
     try:
-        return json.loads(candidate.read_text(encoding="utf-8"))
+        loaded = json.loads(candidate.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         print(
             f"::warning::metadata-file '{path}' is not valid JSON ({exc}); "
@@ -58,6 +58,14 @@ def load_project_json(path: str) -> dict:
             file=sys.stderr,
         )
         return {}
+    if not isinstance(loaded, dict):
+        print(
+            f"::warning::metadata-file '{path}' is JSON but not an object; "
+            "generating a default result.json instead",
+            file=sys.stderr,
+        )
+        return {}
+    return loaded
 
 
 def redact(text: str, redact_spec: str) -> str:
