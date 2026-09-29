@@ -159,10 +159,11 @@ project-specific task
   generic action. Pass `redact` (literal values or env var names) for
   anything the project's own summary text might otherwise leak.
 - **Symlinks are rejected, not silently followed**, if they resolve outside
-  the `paths` root that contains them (`scripts/check_symlinks.py`). An
-  artifact that may become visible to a reviewer (or, for a public
-  repository, to anyone) should never silently gain files from outside what
-  the project asked to publish.
+  the `paths` root that contains them (`scripts/check_symlinks.py`). A
+  configured path that is itself a symlink is rejected when it resolves
+  outside the workspace. An artifact that may become visible to a reviewer
+  (or, for a public repository, to anyone) should never silently gain files
+  from outside what the project asked to publish.
 - **The PR-comment search only checks the most recent 100 comments** on the
   target PR (`actions/github-script`'s single-page `listComments` call). A
   PR that already has more than 100 comments before this action's first run
