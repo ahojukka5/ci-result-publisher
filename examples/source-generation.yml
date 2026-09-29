@@ -28,12 +28,14 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p ci-result generated
-          # Whatever the project's own generation command is. It may exit
-          # non-zero -- continue-on-error above means the publish step below
-          # still runs and still has real output to hand off.
+          # Whatever the project's own generation command is. continue-on-error
+          # keeps the job going, but this step still runs under set -e, so a
+          # non-zero generator would skip the echo and leave exit_code empty.
+          set +e
           ./run-generator.sh --out generated/ \
             >ci-result/stdout.log 2>ci-result/stderr.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
 
       - name: Write project summary and result.json
         if: always()

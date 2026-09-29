@@ -48,8 +48,10 @@ partially-successful jobs, not just successful ones: the publish step still
 runs and still has real files to upload even when `project-specific-command`
 exited non-zero.
 
-See `examples/` for two complete, runnable workflows (source generation,
-and test/benchmark).
+See `examples/` for two workflows to copy (source generation and
+test/benchmark). They are templates: `./run-generator.sh` and
+`./run-benchmarks.sh` belong to the project that copies them, not to this
+repository.
 
 ## Inputs
 
