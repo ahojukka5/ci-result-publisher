@@ -61,7 +61,7 @@ repository.
 | `paths` | yes | | Newline-separated files/directories to upload. Not interpreted. |
 | `status` | yes | | Final status of the preceding task, e.g. `${{ steps.task.outcome }}`. |
 | `summary-file` | no | `''` | Project-provided Markdown summary. A generic fallback is used if omitted or missing. |
-| `metadata-file` | no | `''` | Project-provided `result.json`. A default envelope is generated if omitted or missing. |
+| `metadata-file` | no | `''` | Project-provided `result.json`. A default envelope is generated if omitted, missing, invalid, or not a JSON object. |
 | `retention-days` | no | `30` | Artifact retention. |
 | `pull-request-number` | no | `''` | PR to maintain a stable comment on. Omit for push/schedule/dispatch runs. |
 | `redact` | no | `''` | Newline-separated literal secret values, or env var *names* holding them, to redact from the summary/comment. |
