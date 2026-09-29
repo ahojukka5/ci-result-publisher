@@ -20,8 +20,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Syntax-check action.yml and example workflows
         run: |
-          python3 -c "
-          import sys
+          python3 -m pip install --disable-pip-version-check --target "${RUNNER_TEMP}/pyyaml" PyYAML
+          PYTHONPATH="${RUNNER_TEMP}/pyyaml${PYTHONPATH:+:$PYTHONPATH}" python3 -c "
           import yaml
           for path in ['action.yml', 'examples/source-generation.yml', 'examples/test-benchmark.yml', '.github/workflows/selftest.yml']:
               yaml.safe_load(open(path))
