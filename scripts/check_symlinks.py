@@ -56,6 +56,14 @@ def main() -> int:
         if not os.path.lexists(path):
             continue
         if os.path.islink(path):
+            if not os.path.exists(path):
+                print(
+                    f"::error::Configured path '{path}' is a dangling symlink; "
+                    "rejecting rather than attempting to follow it.",
+                    file=sys.stderr,
+                )
+                rejected = True
+                continue
             target = os.path.realpath(path)
             if not inside(workspace, target):
                 print(
