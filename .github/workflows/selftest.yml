@@ -29,7 +29,7 @@ jobs:
           "
       - name: Compile-check the Python scripts
         run: |
-          python3 -m py_compile scripts/build_result.py scripts/check_symlinks.py
+          python3 -m py_compile scripts/build_result.py scripts/check_symlinks.py scripts/upsert_comment.py
 
   dogfood:
     name: Exercise the action end to end
