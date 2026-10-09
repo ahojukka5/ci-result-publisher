@@ -88,6 +88,30 @@ def default_summary(status: str) -> str:
     return f"_(no project-provided summary; final status: `{status}`)_"
 
 
+def result_json_destination(metadata_file: str, paths_raw: str) -> Path:
+    """Keep the generated envelope inside GITHUB_WORKSPACE, including when
+    paths use absolute names, traversal or symlinks. Do not write to
+    RUNNER_TEMP or outside the workspace just because an input names it."""
+    workspace = Path(env("GITHUB_WORKSPACE") or os.getcwd()).resolve()
+    if metadata_file:
+        candidate = Path(metadata_file)
+    else:
+        paths = [entry.strip() for entry in paths_raw.splitlines() if entry.strip()]
+        if not paths:
+            candidate = Path("result.json")
+        else:
+            first = Path(paths[0])
+            candidate = first / "result.json" if first.is_dir() else first.parent / "result.json"
+
+    destination = (workspace / candidate).resolve()
+    if not destination.is_relative_to(workspace):
+        raise ValueError(
+            f"result.json destination '{destination}' escapes "
+            f"GITHUB_WORKSPACE '{workspace}'"
+        )
+    return destination
+
+
 def main() -> int:
     artifact_name = require("INPUT_ARTIFACT_NAME")
     status = require("INPUT_STATUS")
@@ -146,10 +170,11 @@ def main() -> int:
 
     redacted_summary = redact(summary_text, redact_spec)
 
-    work_dir = Path(env("RUNNER_TEMP", ".")) / "ci-result-publisher"
-    work_dir.mkdir(parents=True, exist_ok=True)
-    result_json_path = work_dir / "result.json"
-    redacted_summary_path = work_dir / "summary.redacted.md"
+    result_json_path = result_json_destination(metadata_file, paths_raw)
+    result_json_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_dir = Path(env("RUNNER_TEMP", ".")) / "ci-result-publisher"
+    summary_dir.mkdir(parents=True, exist_ok=True)
+    redacted_summary_path = summary_dir / "summary.redacted.md"
 
     result_json_path.write_text(json.dumps(project, indent=2) + "\n", encoding="utf-8")
     redacted_summary_path.write_text(redacted_summary, encoding="utf-8")
