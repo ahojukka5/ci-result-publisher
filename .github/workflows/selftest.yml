@@ -83,3 +83,18 @@ jobs:
           fi
         env:
           INPUT_PATHS: ci-result-escape-test/
+
+      - name: Verify a configured path that is itself an escaping symlink is rejected
+        run: |
+          ln -s /etc/passwd ci-result-root-escape
+          set +e
+          python3 "$(pwd)/scripts/check_symlinks.py"
+          rc=$?
+          set -e
+          rm -f ci-result-root-escape
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::expected check_symlinks.py to reject a configured symlink that leaves the workspace, but it exited 0"
+            exit 1
+          fi
+        env:
+          INPUT_PATHS: ci-result-root-escape
