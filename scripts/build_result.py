@@ -142,9 +142,14 @@ def main() -> int:
             )
     if not summary_text.strip():
         summary_text = default_summary(status)
-    project.setdefault("summary", summary_text.strip().splitlines()[0] if summary_text.strip() else "")
-
     redacted_summary = redact(summary_text, redact_spec)
+    project.setdefault(
+        "summary",
+        redacted_summary.strip().splitlines()[0] if redacted_summary.strip() else "",
+    )
+    summary_value = project.get("summary")
+    if isinstance(summary_value, str):
+        project["summary"] = redact(summary_value, redact_spec)
 
     work_dir = Path(env("RUNNER_TEMP", ".")) / "ci-result-publisher"
     work_dir.mkdir(parents=True, exist_ok=True)
