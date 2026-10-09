@@ -120,7 +120,9 @@ through GitHub's own APIs, without any access to the runner itself:
 2. Read the job conclusion and step summary.
 3. Download the named artifact
    (`GET /repos/{owner}/{repo}/actions/artifacts`, then the ZIP).
-4. Read `result.json` from it.
+4. Read `result.json` from it. The envelope is written at `metadata-file`
+   when that input is set, and otherwise as `result.json` next to the
+   configured paths, so it stays inside the workspace tree that was uploaded.
 5. Inspect the project-specific files only when needed.
 
 ## Promotion is a separate concern
