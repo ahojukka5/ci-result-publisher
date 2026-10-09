@@ -72,11 +72,22 @@ def test_directory_symlink_still_rejects_a_nested_escape() -> None:
         assert "escape" in completed.stderr
 
 
+def test_configured_dangling_symlink_fails_cleanly() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        workspace = Path(directory)
+        (workspace / "dangling").symlink_to(workspace / "missing")
+        completed = run(workspace, "dangling/\n")
+        assert completed.returncode == 1, completed.stderr
+        assert "dangling symlink" in completed.stderr
+        assert "Traceback" not in completed.stderr
+
+
 def main() -> None:
     test_nested_escape_is_rejected()
     test_configured_symlink_outside_workspace_is_rejected()
     test_configured_symlink_inside_workspace_is_allowed()
     test_directory_symlink_still_rejects_a_nested_escape()
+    test_configured_dangling_symlink_fails_cleanly()
     print("ok")
 
 
