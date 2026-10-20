@@ -16,6 +16,7 @@ jobs:
     name: Validate action.yml and scripts
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Syntax-check action.yml and example workflows
@@ -35,6 +36,7 @@ jobs:
     name: Exercise the action end to end
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
