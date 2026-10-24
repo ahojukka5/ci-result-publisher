@@ -77,7 +77,18 @@ def main() -> int:
                 continue
         root = os.path.realpath(path)
         for link in iter_symlinks(path):
-            if os.path.islink(path) and os.path.samefile(link, path):
+            # The root link was checked against the workspace above.
+            # Comparing filesystem inodes here would crash on dangling
+            # nested links: inspect untrusted paths lexically instead.
+            if link == path:
+                continue
+            if not os.path.exists(link):
+                print(
+                    f"::error::Symlink '{link}' is dangling; refusing an "
+                    "unverifiable artifact path.",
+                    file=sys.stderr,
+                )
+                rejected = True
                 continue
             target = os.path.realpath(link)
             if inside(root, target):

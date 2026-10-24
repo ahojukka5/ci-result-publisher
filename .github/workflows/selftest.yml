@@ -8,20 +8,19 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 jobs:
   validate:
     name: Validate action.yml and scripts
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Syntax-check action.yml and example workflows
         run: |
-          python3 -c "
-          import sys
+          python3 -m pip install --disable-pip-version-check --target "${RUNNER_TEMP}/pyyaml" PyYAML
+          PYTHONPATH="${RUNNER_TEMP}/pyyaml${PYTHONPATH:+:$PYTHONPATH}" python3 -c "
           import yaml
           for path in ['action.yml', 'examples/source-generation.yml', 'examples/test-benchmark.yml', '.github/workflows/selftest.yml']:
               yaml.safe_load(open(path))
@@ -31,10 +30,18 @@ jobs:
         run: |
           python3 -m py_compile scripts/build_result.py scripts/check_symlinks.py
 
+      - name: Exercise symlink rejection and workspace boundary
+        run: python3 tests/test_check_symlinks.py
+
   dogfood:
     name: Exercise the action end to end
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 

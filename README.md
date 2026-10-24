@@ -159,7 +159,8 @@ project-specific task
 - **Symlinks are rejected, not silently followed**, if they resolve outside
   the `paths` root that contains them (`scripts/check_symlinks.py`). A
   configured path that is itself a symlink is rejected when it resolves
-  outside the workspace. An artifact that may become visible to a reviewer
+  outside the workspace. Dangling configured or nested symlinks are also
+  rejected with a diagnostic rather than silently skipped. An artifact that may become visible to a reviewer
   (or, for a public repository, to anyone) should never silently gain files
   from outside what the project asked to publish.
 - **The PR-comment search only checks the most recent 100 comments** on the
