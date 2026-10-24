@@ -64,7 +64,7 @@ repository.
 | `metadata-file` | no | `''` | Project-provided `result.json`. A default envelope is generated if omitted, missing, invalid, or not a JSON object. |
 | `retention-days` | no | `30` | Artifact retention. |
 | `pull-request-number` | no | `''` | PR to maintain a stable comment on. Omit for push/schedule/dispatch runs. |
-| `redact` | no | `''` | Newline-separated literal secret values, or env var *names* holding them, to redact from the summary/comment. |
+| `redact` | no | `''` | Newline-separated literal secret values, or env var *names* holding them, to redact from the summary, the PR comment, and the `summary` field written into `result.json`. |
 | `comment-marker` | no | `<!-- private-ci-result -->` | Marker identifying this action's stable comment. |
 
 ## Outputs
@@ -153,7 +153,8 @@ project-specific task
 - **No cross-repository credential is ever required or accepted.** This
   action only uses the calling workflow's own `GITHUB_TOKEN` and the
   standard Actions artifact/summary/comment APIs.
-- **Redaction is text-substitution over the summary and PR comment only**,
+- **Redaction is text-substitution over the step summary, the PR comment,
+  and the `summary` field this action writes into `result.json`.** It is
   not a general secret scanner over arbitrary uploaded files -- scanning
   binaries or large generated trees for secrets is out of scope for a
   generic action. Pass `redact` (literal values or env var names) for
