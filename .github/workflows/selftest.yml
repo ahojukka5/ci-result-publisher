@@ -30,6 +30,9 @@ jobs:
         run: |
           python3 -m py_compile scripts/build_result.py scripts/check_symlinks.py
 
+      - name: Exercise symlink rejection and workspace boundary
+        run: python3 tests/test_check_symlinks.py
+
   dogfood:
     name: Exercise the action end to end
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository

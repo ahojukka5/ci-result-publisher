@@ -72,6 +72,31 @@ def test_directory_symlink_still_rejects_a_nested_escape() -> None:
         assert "escape" in completed.stderr
 
 
+def test_dangling_nested_symlink_in_direct_directory_is_rejected() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        workspace = Path(directory)
+        root = workspace / "bundle"
+        root.mkdir()
+        (root / "missing").symlink_to("not-there")
+        completed = run(workspace, "bundle/\n")
+        assert completed.returncode == 1, completed.stderr
+        assert "dangling" in completed.stderr
+        assert "Traceback" not in completed.stderr
+
+
+def test_dangling_nested_symlink_under_configured_directory_link() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        workspace = Path(directory)
+        real = workspace / "real"
+        real.mkdir()
+        (real / "dangling").symlink_to("missing")
+        (workspace / "outdir").symlink_to(real, target_is_directory=True)
+        completed = run(workspace, "outdir/\n")
+        assert completed.returncode == 1, completed.stderr
+        assert "dangling" in completed.stderr
+        assert "Traceback" not in completed.stderr
+
+
 def test_configured_dangling_symlink_fails_cleanly() -> None:
     with tempfile.TemporaryDirectory() as directory:
         workspace = Path(directory)
@@ -87,6 +112,8 @@ def main() -> None:
     test_configured_symlink_outside_workspace_is_rejected()
     test_configured_symlink_inside_workspace_is_allowed()
     test_directory_symlink_still_rejects_a_nested_escape()
+    test_dangling_nested_symlink_in_direct_directory_is_rejected()
+    test_dangling_nested_symlink_under_configured_directory_link()
     test_configured_dangling_symlink_fails_cleanly()
     print("ok")
 
