@@ -43,9 +43,13 @@ def test_object_metadata_is_kept() -> None:
 def test_main_publishes_default_envelope_for_a_list() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        meta = root / "meta.json"
+        workspace = root / "workspace"
+        runner_temp = root / "runner-temp"
+        workspace.mkdir()
+        runner_temp.mkdir()
+        meta = workspace / "meta.json"
         meta.write_text("[]\n", encoding="utf-8")
-        output = root / "github-output"
+        output = workspace / "github-output"
         env = os.environ.copy()
         env.update(
             {
@@ -55,7 +59,8 @@ def test_main_publishes_default_envelope_for_a_list() -> None:
                 "INPUT_METADATA_FILE": str(meta),
                 "INPUT_SUMMARY_FILE": "",
                 "INPUT_REDACT": "",
-                "RUNNER_TEMP": str(root),
+                "RUNNER_TEMP": str(runner_temp),
+                "GITHUB_WORKSPACE": str(workspace),
                 "GITHUB_OUTPUT": str(output),
                 "GITHUB_REPOSITORY": "ahojukka5/example",
                 "GITHUB_SHA": "0123456789abcdef",
@@ -67,6 +72,7 @@ def test_main_publishes_default_envelope_for_a_list() -> None:
         )
         completed = subprocess.run(
             [sys.executable, str(SCRIPT)],
+            cwd=workspace,
             env=env,
             check=False,
             capture_output=True,
@@ -74,9 +80,17 @@ def test_main_publishes_default_envelope_for_a_list() -> None:
         )
         assert completed.returncode == 0, completed.stderr
         assert "not an object" in completed.stderr
-        result = json.loads(
-            (root / "ci-result-publisher" / "result.json").read_text(encoding="utf-8")
-        )
+        recorded = ""
+        for line in output.read_text(encoding="utf-8").splitlines():
+            if line.startswith("result-json-path="):
+                recorded = line.split("=", 1)[1]
+        result_path = Path(recorded)
+        assert result_path.is_file()
+        resolved = result_path.resolve()
+        assert resolved.is_relative_to(workspace.resolve())
+        assert runner_temp.resolve() not in resolved.parents
+        assert resolved == meta.resolve()
+        result = json.loads(resolved.read_text(encoding="utf-8"))
         assert result["schema"] == "private-ci-result-v1"
         assert result["status"] == "success"
         assert result["outputs"] == [{"path": "out.txt", "kind": "unspecified"}]

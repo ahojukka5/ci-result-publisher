@@ -103,9 +103,11 @@ def test_workspace_escapes_are_rejected() -> None:
         (workspace / "external").symlink_to(outside, target_is_directory=True)
         cases = (
             ("../outside/result.json", ""),
+            ("nested/../../outside/result.json", ""),
             (str(outside / "result.json"), ""),
             ("external/result.json", ""),
-            ("", str(outside) + "/\\n"),
+            ("", "../outside/notes.txt\n"),
+            ("", str(outside / "notes") + "\n"),
         )
         with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(workspace)}):
             for metadata, paths in cases:
@@ -118,10 +120,72 @@ def test_workspace_escapes_are_rejected() -> None:
         assert not (outside / "result.json").exists()
 
 
+def test_script_does_not_write_outside_the_workspace() -> None:
+    """Path traversal and absolute paths must fail closed in main(), not only
+    in the helper, and must not create or replace a file outside."""
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        workspace = root / "workspace"
+        outside = root / "outside"
+        workspace.mkdir()
+        outside.mkdir()
+        (workspace / "nested").mkdir()
+        kept = outside / "result.json"
+        kept.write_text('{"summary":"do-not-touch"}\n', encoding="utf-8")
+        cases = (
+            ("../outside/result.json", "notes/\n"),
+            ("nested/../../outside/result.json", "notes/\n"),
+            (str(kept), "notes/\n"),
+            ("", "../outside/notes.txt\n"),
+            ("", str(outside / "notes.txt") + "\n"),
+        )
+        for metadata, paths in cases:
+            before = kept.read_text(encoding="utf-8")
+            runner_temp = workspace / "runner-temp"
+            runner_temp.mkdir(exist_ok=True)
+            output = workspace / "github-output"
+            if output.exists():
+                output.unlink()
+            env = os.environ.copy()
+            env.update(
+                {
+                    "INPUT_ARTIFACT_NAME": "evidence",
+                    "INPUT_STATUS": "success",
+                    "INPUT_PATHS": paths,
+                    "INPUT_METADATA_FILE": metadata,
+                    "INPUT_SUMMARY_FILE": "",
+                    "INPUT_REDACT": "",
+                    "RUNNER_TEMP": str(runner_temp),
+                    "GITHUB_WORKSPACE": str(workspace),
+                    "GITHUB_OUTPUT": str(output),
+                    "GITHUB_REPOSITORY": "ahojukka5/example",
+                    "GITHUB_SHA": "0123456789abcdef",
+                    "GITHUB_RUN_ID": "9",
+                    "GITHUB_RUN_ATTEMPT": "1",
+                    "GITHUB_JOB": "publish",
+                    "GITHUB_STEP_SUMMARY": "",
+                }
+            )
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT)],
+                cwd=workspace,
+                env=env,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            assert completed.returncode != 0, metadata or paths
+            assert kept.read_text(encoding="utf-8") == before
+            assert list(outside.rglob("result.json")) == [kept]
+            leaked = runner_temp / "ci-result-publisher" / "result.json"
+            assert not leaked.exists()
+
+
 def main() -> None:
     test_metadata_file_is_overwritten_in_place()
     test_omitted_metadata_lands_next_to_the_paths()
     test_workspace_escapes_are_rejected()
+    test_script_does_not_write_outside_the_workspace()
     print("ok")
 
 
