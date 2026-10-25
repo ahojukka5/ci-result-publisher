@@ -34,6 +34,7 @@ def run_publisher(root: Path, summary: str, metadata: Optional[str]) -> dict:
             "INPUT_SUMMARY_FILE": str(summary_path),
             "INPUT_REDACT": SECRET,
             "RUNNER_TEMP": str(root),
+            "GITHUB_WORKSPACE": str(root),
             "GITHUB_OUTPUT": str(root / "github-output"),
             "GITHUB_REPOSITORY": "ahojukka5/example",
             "GITHUB_SHA": "0123456789abcdef",
@@ -45,13 +46,22 @@ def run_publisher(root: Path, summary: str, metadata: Optional[str]) -> dict:
     )
     completed = subprocess.run(
         [sys.executable, str(SCRIPT)],
+        cwd=root,
         env=env,
         check=False,
         capture_output=True,
         text=True,
     )
     assert completed.returncode == 0, completed.stderr
-    result_path = root / "ci-result-publisher" / "result.json"
+    recorded = ""
+    for line in (root / "github-output").read_text(encoding="utf-8").splitlines():
+        if line.startswith("result-json-path="):
+            recorded = line.split("=", 1)[1]
+    result_path = Path(recorded)
+    if not result_path.is_absolute():
+        result_path = root / result_path
+    assert result_path.is_file()
+    assert result_path.resolve().is_relative_to(root.resolve())
     raw = result_path.read_text(encoding="utf-8")
     assert SECRET not in raw
     return json.loads(raw)
